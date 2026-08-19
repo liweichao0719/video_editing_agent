@@ -1,0 +1,34 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  core-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Check Python syntax
+        run: >-
+          python -m compileall -q
+          analyze_video.py audio_candidates.py evaluate.py pipeline.py server.py
+          evaluation tests
+
+      - name: Run core tests
+        env:
+          TF_CPP_MIN_LOG_LEVEL: "2"
+        run: python -m unittest discover -s tests -v
