@@ -42,6 +42,11 @@ TF_CPP_MIN_LOG_LEVEL=2 .venv/bin/python evaluate.py \
 
 程序每完成一个样本就保存一次，`--resume` 可以跳过已有结果。报告包含准确率、精确率、召回率、F1、时间段 IoU、起止时间误差和完整覆盖率。
 
-完整流程默认启用视觉兜底：仅当声音阶段没有候选时生成稀疏无声扫描视频，画面左上角保留原视频时间；视觉初筛得到的时间段仍需经过精确音画确认和成品复检。可通过 `--visual-scan-interval`、`--visual-padding` 调整，或用 `--no-visual-fallback` 关闭。
+完整流程默认启用补充视觉扫描：无论声音阶段是否已有候选，都会生成稀疏无声扫描视频，
+画面左上角保留原视频时间。音频和视觉候选会先去重融合，再经过精确音画确认和成品复检；
+模型返回的片段内事件边界会加上可配置上下文后用于剪辑。可通过
+`--visual-scan-interval`、`--visual-padding`、`--visual-scan-attempts`、
+`--event-padding` 调整，或用
+`--no-visual-scan` 关闭。
 
 当前真实集仍然很小：正样本只来自两个源事件组，其中包含慢动作和重放版本；`Drones vs. Windows` 的 Commons 页面还标记为许可待复核。因此它只适合发现明显问题，不能代表线上准确率，也不应直接作为可再分发数据集。首轮结果见 `RESULTS.md`。

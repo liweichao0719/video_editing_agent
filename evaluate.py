@@ -13,6 +13,8 @@ import time
 
 from audio_candidates import DEFAULT_MODEL_PATH, locate_candidates
 from pipeline import (
+    DEFAULT_EVENT_PADDING,
+    DEFAULT_VISUAL_SCAN_ATTEMPTS,
     DEFAULT_VISUAL_PADDING,
     DEFAULT_VISUAL_SCAN_INTERVAL,
     run_pipeline,
@@ -28,14 +30,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--threshold", type=float, default=0.10)
-    parser.add_argument("--max-candidates", type=int, default=3)
+    parser.add_argument(
+        "--max-candidates",
+        type=int,
+        default=3,
+        help="每种候选来源最多保留的时间段数量",
+    )
     parser.add_argument("--min-confidence", type=float, default=0.55)
     parser.add_argument("--retry-padding", type=float, default=1.0)
+    parser.add_argument("--event-padding", type=float, default=DEFAULT_EVENT_PADDING)
     parser.add_argument(
         "--visual-scan-interval", type=float, default=DEFAULT_VISUAL_SCAN_INTERVAL
     )
     parser.add_argument("--visual-padding", type=float, default=DEFAULT_VISUAL_PADDING)
-    parser.add_argument("--no-visual-fallback", action="store_true")
+    parser.add_argument(
+        "--visual-scan-attempts",
+        type=int,
+        default=DEFAULT_VISUAL_SCAN_ATTEMPTS,
+    )
+    parser.add_argument(
+        "--no-visual-scan",
+        "--no-visual-fallback",
+        dest="no_visual_fallback",
+        action="store_true",
+    )
     parser.add_argument("--skip-final-review", action="store_true")
     parser.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
     return parser.parse_args()
@@ -218,9 +236,11 @@ def full_predictions(sample: dict, args: argparse.Namespace) -> tuple[list[dict]
         max_candidates=args.max_candidates,
         min_confidence=args.min_confidence,
         retry_padding=args.retry_padding,
+        event_padding=args.event_padding,
         visual_fallback=not args.no_visual_fallback,
         visual_scan_interval=args.visual_scan_interval,
         visual_padding=args.visual_padding,
+        visual_scan_attempts=args.visual_scan_attempts,
         final_review=not args.skip_final_review,
         model_path=args.model_path,
         api_key=os.environ.get("ARK_API_KEY", "").strip(),
@@ -238,6 +258,7 @@ def full_predictions(sample: dict, args: argparse.Namespace) -> tuple[list[dict]
         "pipeline_status": report["status"],
         "pipeline_report": str(report_path),
         "visual_fallback_used": report["visual_fallback"]["used"],
+        "visual_scan_used": report["visual_fallback"]["used"],
     }
 
 
@@ -295,6 +316,10 @@ def main() -> int:
             raise RuntimeError("visual-scan-interval 必须大于 0")
         if args.visual_padding < 0:
             raise RuntimeError("visual-padding 不能小于 0")
+        if args.event_padding < 0:
+            raise RuntimeError("event-padding 不能小于 0")
+        if args.visual_scan_attempts < 1:
+            raise RuntimeError("visual-scan-attempts 必须至少为 1")
 
         output = args.output.resolve()
         settings = {
@@ -302,10 +327,15 @@ def main() -> int:
             "max_candidates": args.max_candidates,
             "min_confidence": args.min_confidence,
             "retry_padding": args.retry_padding,
+            "event_padding": args.event_padding,
             "final_review": not args.skip_final_review,
             "visual_fallback": not args.no_visual_fallback,
+            "visual_scan_mode": (
+                "supplemental" if not args.no_visual_fallback else "disabled"
+            ),
             "visual_scan_interval": args.visual_scan_interval,
             "visual_padding": args.visual_padding,
+            "visual_scan_attempts": args.visual_scan_attempts,
         }
         results = []
         if args.resume and output.is_file():

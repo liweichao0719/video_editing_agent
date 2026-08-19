@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the sound-triggered video evidence pipeline end to end."""
+"""Run the multimodal video evidence pipeline end to end."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import argparse
 import base64
 from datetime import datetime, timezone
 import json
+import math
 import mimetypes
 import os
 from pathlib import Path
@@ -23,6 +24,9 @@ from audio_candidates import DEFAULT_MODEL_PATH, locate_candidates
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 DEFAULT_VISUAL_SCAN_INTERVAL = 2.0
 DEFAULT_VISUAL_PADDING = 2.0
+DEFAULT_VISUAL_SCAN_ATTEMPTS = 2
+VISUAL_SCAN_PLAYBACK_FPS = 4
+DEFAULT_EVENT_PADDING = 1.0
 MIN_VISUAL_SCAN_CONFIDENCE = 0.30
 
 
@@ -34,14 +38,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--event", required=True)
     parser.add_argument("--output", type=Path, default=Path("outputs"))
     parser.add_argument("--threshold", type=float, default=0.10)
-    parser.add_argument("--max-candidates", type=int, default=3)
+    parser.add_argument(
+        "--max-candidates",
+        type=int,
+        default=3,
+        help="每种候选来源最多保留的时间段数量",
+    )
     parser.add_argument("--min-confidence", type=float, default=0.55)
     parser.add_argument("--retry-padding", type=float, default=1.0)
+    parser.add_argument(
+        "--event-padding",
+        type=float,
+        default=DEFAULT_EVENT_PADDING,
+        help="模型定位出的事件前后保留的上下文秒数",
+    )
     parser.add_argument(
         "--visual-scan-interval",
         type=float,
         default=DEFAULT_VISUAL_SCAN_INTERVAL,
-        help="声音无候选时，视觉抽帧扫描的间隔秒数",
+        help="补充视觉抽帧扫描的间隔秒数",
     )
     parser.add_argument(
         "--visual-padding",
@@ -49,7 +64,19 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_VISUAL_PADDING,
         help="视觉候选前后扩展的秒数",
     )
-    parser.add_argument("--no-visual-fallback", action="store_true")
+    parser.add_argument(
+        "--visual-scan-attempts",
+        type=int,
+        default=DEFAULT_VISUAL_SCAN_ATTEMPTS,
+        help="视觉扫描请求的最大尝试次数",
+    )
+    parser.add_argument(
+        "--no-visual-scan",
+        "--no-visual-fallback",
+        dest="no_visual_fallback",
+        action="store_true",
+        help="关闭补充视觉扫描，仅使用音频候选",
+    )
     parser.add_argument("--skip-final-review", action="store_true")
     parser.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
     return parser.parse_args()
@@ -242,6 +269,94 @@ def normalize_visual_candidates(
     return sorted(selected, key=lambda item: item["start"])
 
 
+def candidate_iou(left: dict, right: dict) -> float:
+    overlap = max(
+        0.0,
+        min(float(left["end"]), float(right["end"]))
+        - max(float(left["start"]), float(right["start"])),
+    )
+    union = (
+        max(float(left["end"]), float(right["end"]))
+        - min(float(left["start"]), float(right["start"]))
+    )
+    return overlap / union if union > 0 else 0.0
+
+
+def fuse_candidates(
+    audio_candidates: list[dict],
+    visual_candidates: list[dict],
+    *,
+    max_candidates: int,
+) -> list[dict]:
+    """Keep candidates from both modalities and merge clear cross-modal duplicates."""
+    selected_audio = sorted(
+        audio_candidates, key=lambda item: item["score"], reverse=True
+    )[:max_candidates]
+    selected_visual = sorted(
+        visual_candidates, key=lambda item: item["score"], reverse=True
+    )[:max_candidates]
+    fused = [{**candidate} for candidate in selected_audio]
+
+    for visual in selected_visual:
+        matches = [
+            (index, candidate_iou(candidate, visual))
+            for index, candidate in enumerate(fused)
+            if candidate.get("origin") in {"audio", "audio_visual"}
+        ]
+        best_index, best_overlap = max(matches, key=lambda item: item[1], default=(-1, 0.0))
+        if best_overlap < 0.50:
+            fused.append({**visual})
+            continue
+
+        current = fused[best_index]
+        current["origin"] = "audio_visual"
+        current["audio_score"] = current.get("audio_score", current["score"])
+        current["visual_score"] = visual["score"]
+        current["score"] = max(current["score"], visual["score"])
+        current["start"] = round(min(current["start"], visual["start"]), 3)
+        current["end"] = round(max(current["end"], visual["end"]), 3)
+        current["time"] = f"{current['start']:.2f}-{current['end']:.2f}"
+        evidence = str(visual.get("visual_evidence", "")).strip()
+        if evidence:
+            current["visual_evidence"] = evidence
+
+    return sorted(fused, key=lambda item: item["start"])
+
+
+def refine_clip_bounds(
+    candidate: dict,
+    confirmation: dict,
+    source_duration: float,
+    *,
+    padding: float,
+) -> tuple[float, float, bool]:
+    """Convert model-reported clip-local bounds into padded source bounds."""
+    candidate_start = float(candidate["start"])
+    candidate_end = float(candidate["end"])
+    clip_duration = candidate_end - candidate_start
+    try:
+        event_start = float(confirmation["event_start"])
+        event_end = float(confirmation["event_end"])
+    except (KeyError, TypeError, ValueError):
+        return candidate_start, candidate_end, False
+    if not math.isfinite(event_start) or not math.isfinite(event_end):
+        return candidate_start, candidate_end, False
+    tolerance = 0.25
+    if (
+        event_start < -tolerance
+        or event_end > clip_duration + tolerance
+        or event_end <= event_start
+    ):
+        return candidate_start, candidate_end, False
+    event_start = max(0.0, min(clip_duration, event_start))
+    event_end = max(0.0, min(clip_duration, event_end))
+    start = max(0.0, candidate_start + event_start - padding)
+    end = min(source_duration, candidate_start + event_end + padding)
+    if end <= start:
+        return candidate_start, candidate_end, False
+    return round(start, 3), round(end, 3), True
+
+
 def make_visual_scan(source: Path, destination: Path, interval: float) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     timestamp = (
@@ -250,7 +365,8 @@ def make_visual_scan(source: Path, destination: Path, interval: float) -> None:
     )
     filters = (
         "scale=640:-2,"
-        f"{timestamp},fps=1/{interval:.3f}"
+        f"{timestamp},fps=1/{interval:.3f},"
+        f"setpts=N/({VISUAL_SCAN_PLAYBACK_FPS}*TB)"
     )
     run_command(
         [
@@ -264,8 +380,10 @@ def make_visual_scan(source: Path, destination: Path, interval: float) -> None:
             "-an",
             "-vf",
             filters,
+            "-r",
+            str(VISUAL_SCAN_PLAYBACK_FPS),
             "-fps_mode",
-            "vfr",
+            "cfr",
             "-c:v",
             "libx264",
             "-preset",
@@ -289,6 +407,7 @@ def scan_visual_candidates(
     interval: float,
     padding: float,
     max_candidates: int,
+    attempts: int,
     api_key: str,
 ) -> tuple[list[dict], dict]:
     prompt = f"""你是视频事件粗筛器。这个视频是从原视频每隔 {interval:.3f} 秒抽取一帧组成的无声扫描视频。
@@ -296,14 +415,28 @@ def scan_visual_candidates(
 重点观察事件发生前后的状态变化，不要因为已经破损的物体一直存在就重复报候选。
 返回最多 {max_candidates} 个原视频时间段；证据不足时返回空数组。只输出 JSON：
 {{"candidates":[{{"start":0.0,"end":1.0,"confidence":0.0,"visual_evidence":"..."}}]}}"""
-    raw = call_model(scan, prompt, api_key)
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            raw = call_model(scan, prompt, api_key)
+            break
+        except RuntimeError as exc:
+            last_error = exc
+    else:
+        raise RuntimeError(
+            f"视觉扫描在 {attempts} 次尝试后失败：{last_error}"
+        ) from last_error
     candidates = normalize_visual_candidates(
         raw,
         source_duration,
         padding=padding,
         max_candidates=max_candidates,
     )
-    return candidates, {"raw": raw, "candidates": candidates}
+    return candidates, {
+        "raw": raw,
+        "candidates": candidates,
+        "attempts": attempt,
+    }
 
 
 def confirm_candidate(
@@ -313,6 +446,13 @@ def confirm_candidate(
         source_description = (
             f"候选来自稀疏视觉扫描，初筛置信度为 {candidate['score']}，"
             f"初筛证据为：{candidate.get('visual_evidence', '')}。"
+        )
+    elif candidate.get("origin") == "audio_visual":
+        source_description = (
+            f"音频和视觉扫描都命中了这个候选。音频得分为 "
+            f"{candidate.get('audio_score', candidate['score'])}，视觉初筛得分为 "
+            f"{candidate.get('visual_score', candidate['score'])}，视觉证据为："
+            f"{candidate.get('visual_evidence', '')}。两种初筛都可能误报。"
         )
     else:
         source_description = (
@@ -438,9 +578,11 @@ def run_pipeline(
     max_candidates: int,
     min_confidence: float,
     retry_padding: float,
+    event_padding: float,
     visual_fallback: bool,
     visual_scan_interval: float,
     visual_padding: float,
+    visual_scan_attempts: int,
     final_review: bool,
     model_path: Path,
     api_key: str,
@@ -462,15 +604,10 @@ def run_pipeline(
     audio_candidates = [
         {**item, "origin": "audio"} for item in detection["candidates"]
     ]
-    candidates = sorted(
-        sorted(audio_candidates, key=lambda item: item["score"], reverse=True)[
-            :max_candidates
-        ],
-        key=lambda item: item["start"],
-    )
+    candidates = fuse_candidates(audio_candidates, [], max_candidates=max_candidates)
     report = {
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "pipeline_version": 2,
+        "pipeline_version": 3,
         "source": str(source),
         "event": event,
         "status": "processing",
@@ -481,18 +618,24 @@ def run_pipeline(
             "max_candidates": max_candidates,
             "final_model_review": final_review,
             "retry_padding": retry_padding,
+            "event_padding": event_padding,
             "visual_fallback": visual_fallback,
+            "visual_scan_mode": "supplemental" if visual_fallback else "disabled",
             "visual_scan_interval": visual_scan_interval,
             "visual_padding": visual_padding,
+            "visual_scan_attempts": visual_scan_attempts,
         },
         "source_media": source_media,
         "detection": detection,
         "visual_fallback": {
             "enabled": visual_fallback,
+            "mode": "supplemental" if visual_fallback else "disabled",
             "used": False,
             "scan_media": None,
             "raw": None,
             "candidates": [],
+            "attempts": None,
+            "error": None,
         },
         "results": [],
         "outputs": [],
@@ -500,25 +643,46 @@ def run_pipeline(
 
     with tempfile.TemporaryDirectory(prefix="evidence-pipeline-") as temp_name:
         temp_dir = Path(temp_name)
-        if not candidates and visual_fallback:
+        if visual_fallback:
             scan_path = temp_dir / "visual_scan.mp4"
             make_visual_scan(source, scan_path, visual_scan_interval)
-            candidates, visual_scan = scan_visual_candidates(
-                scan_path,
-                event,
-                source_media["duration"],
-                interval=visual_scan_interval,
-                padding=visual_padding,
-                max_candidates=max_candidates,
-                api_key=api_key,
-            )
-            report["visual_fallback"] = {
-                "enabled": True,
-                "used": True,
-                "scan_media": probe_media(scan_path),
-                "raw": visual_scan["raw"],
-                "candidates": candidates,
-            }
+            try:
+                visual_candidates, visual_scan = scan_visual_candidates(
+                    scan_path,
+                    event,
+                    source_media["duration"],
+                    interval=visual_scan_interval,
+                    padding=visual_padding,
+                    max_candidates=max_candidates,
+                    attempts=visual_scan_attempts,
+                    api_key=api_key,
+                )
+            except RuntimeError as exc:
+                report["visual_fallback"].update(
+                    {
+                        "used": True,
+                        "scan_media": probe_media(scan_path),
+                        "error": str(exc),
+                    }
+                )
+                if not candidates:
+                    raise
+            else:
+                report["visual_fallback"] = {
+                    "enabled": True,
+                    "mode": "supplemental",
+                    "used": True,
+                    "scan_media": probe_media(scan_path),
+                    "raw": visual_scan["raw"],
+                    "candidates": visual_candidates,
+                    "attempts": visual_scan["attempts"],
+                    "error": None,
+                }
+                candidates = fuse_candidates(
+                    audio_candidates,
+                    visual_candidates,
+                    max_candidates=max_candidates,
+                )
         if not candidates:
             report["status"] = "no_candidate"
             report_path = write_report(output_dir, source, report)
@@ -536,7 +700,18 @@ def run_pipeline(
                 report["results"].append(item)
                 continue
 
-            start, end = candidate["start"], candidate["end"]
+            start, end, refined = refine_clip_bounds(
+                candidate,
+                confirmation,
+                source_media["duration"],
+                padding=event_padding,
+            )
+            item["boundary_refinement"] = {
+                "used": refined,
+                "event_padding": event_padding,
+                "start": start,
+                "end": end,
+            }
             clip_name = f"{source.stem}_{safe_name(event)}_{index:02d}.mp4"
             clip_path = output_dir / clip_name
             cut_clip(source, clip_path, start, end)
@@ -618,6 +793,10 @@ def main() -> int:
             raise RuntimeError("visual-scan-interval 必须大于 0")
         if args.visual_padding < 0:
             raise RuntimeError("visual-padding 不能小于 0")
+        if args.event_padding < 0:
+            raise RuntimeError("event-padding 不能小于 0")
+        if args.visual_scan_attempts < 1:
+            raise RuntimeError("visual-scan-attempts 必须至少为 1")
         report, report_path = run_pipeline(
             video,
             args.event,
@@ -626,9 +805,11 @@ def main() -> int:
             max_candidates=args.max_candidates,
             min_confidence=args.min_confidence,
             retry_padding=args.retry_padding,
+            event_padding=args.event_padding,
             visual_fallback=not args.no_visual_fallback,
             visual_scan_interval=args.visual_scan_interval,
             visual_padding=args.visual_padding,
+            visual_scan_attempts=args.visual_scan_attempts,
             final_review=not args.skip_final_review,
             model_path=args.model_path,
             api_key=os.environ.get("ARK_API_KEY", "").strip(),
