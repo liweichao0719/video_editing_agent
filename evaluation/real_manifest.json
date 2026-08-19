@@ -1,7 +1,7 @@
 {
   "version": 1,
   "name": "glass-breaking-real-v1",
-  "description": "首轮真实素材评测集：5 个玻璃破碎正样本、5 个易混淆声音负样本。",
+  "description": "首轮真实素材评测集：5 个正样本中的 11 次玻璃破碎、5 个易混淆声音负样本。",
   "root": "..",
   "default_event": "玻璃破碎",
   "samples": [
@@ -11,8 +11,8 @@
       "split": "test",
       "kind": "real",
       "expected": true,
-      "events": [{"start": 0.0, "end": 2.5}],
-      "notes": "真实茶杯落地；文件开头即进入撞击和碎片声。"
+      "events": [{"start": 0.28, "end": 0.56}],
+      "notes": "真实茶杯落地；标注为首次撞地至主要碎裂结束的核心区间。"
     },
     {
       "id": "drone-early-window-rig-positive",
@@ -21,10 +21,11 @@
       "kind": "real",
       "expected": true,
       "events": [
-        {"start": 1.0, "end": 7.5},
-        {"start": 8.5, "end": 17.5}
+        {"start": 2.25, "end": 3.05},
+        {"start": 8.85, "end": 9.45},
+        {"start": 12.35, "end": 13.05}
       ],
-      "notes": "无人机连续撞碎独立窗框，含两个拍摄角度，裁自原片 139-160 秒。"
+      "notes": "无人机连续撞碎三块独立窗片；480p 逐帧标注新裂纹至主要脱落，裁自原片 139-160 秒。"
     },
     {
       "id": "drone-car-side-window-positive",
@@ -33,11 +34,11 @@
       "kind": "real",
       "expected": true,
       "events": [
-        {"start": 1.5, "end": 11.5},
-        {"start": 12.0, "end": 20.5},
-        {"start": 21.0, "end": 26.0}
+        {"start": 1.95, "end": 8.9},
+        {"start": 14.8, "end": 17.9},
+        {"start": 21.9, "end": 24.9}
       ],
-      "notes": "无人机撞碎汽车侧窗及两个重放视角，裁自原片 506-536 秒。"
+      "notes": "无人机撞碎汽车侧窗及两个慢放/重放视角；按 source occurrence 分开计数，裁自原片 506-536 秒。"
     },
     {
       "id": "drone-window-rig-impact-positive",
@@ -46,10 +47,11 @@
       "kind": "real",
       "expected": true,
       "events": [
-        {"start": 5.0, "end": 8.0},
-        {"start": 12.4, "end": 18.5}
+        {"start": 5.5, "end": 7.2},
+        {"start": 12.88, "end": 13.45},
+        {"start": 15.9, "end": 16.55}
       ],
-      "notes": "独立窗框撞击及其慢动作重放，裁自原片 285-307 秒。"
+      "notes": "窗框撞击的三个 source occurrence；后两次逐帧可见各自从完整到新爆裂，裁自原片 285-307 秒。"
     },
     {
       "id": "glass-teacup-veryslow-positive",
@@ -57,8 +59,8 @@
       "split": "test",
       "kind": "real",
       "expected": true,
-      "events": [{"start": 1.0, "end": 4.0}],
-      "notes": "同一茶杯事件的慢动作版本，保留了被减速的原始声音。"
+      "events": [{"start": 1.96, "end": 3.56}],
+      "notes": "同一茶杯事件的慢动作版本；标注首次接地至主要碎裂结束，保留减速声音。"
     },
     {
       "id": "blender-negative",
