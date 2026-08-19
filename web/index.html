@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>多模态数据流 Demo</title>
+  <style>
+    :root { color-scheme: dark; --bg:#07111f; --card:#0d1b2d; --line:#29435f; --cyan:#4ee1d2; --blue:#6aa7ff; --text:#e7f1ff; --muted:#8ca3bc; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; font-family:Inter,"PingFang SC",sans-serif; color:var(--text); background:radial-gradient(circle at 50% 0,#142a45 0,var(--bg) 48%); }
+    main { width:min(1120px,92vw); margin:auto; padding:54px 0; }
+    h1 { margin:0; font-size:clamp(28px,4vw,44px); letter-spacing:-1px; }
+    .sub { color:var(--muted); margin:10px 0 38px; }
+    .flow { display:grid; grid-template-columns:repeat(4,1fr); gap:28px; position:relative; }
+    .flow::before { content:""; position:absolute; top:66px; left:11%; right:11%; height:2px; background:var(--line); }
+    .node { position:relative; min-height:134px; padding:22px; border:1px solid #28425e; border-radius:18px; background:linear-gradient(145deg,rgba(18,39,62,.96),rgba(9,23,39,.96)); cursor:pointer; transition:.25s; z-index:1; }
+    .node:hover,.node.active { transform:translateY(-5px); border-color:var(--cyan); box-shadow:0 12px 35px #03101e,0 0 0 1px #4ee1d233; }
+    .icon { width:42px; height:42px; display:grid; place-items:center; border-radius:12px; background:#183451; font-size:21px; margin-bottom:14px; }
+    .node h2 { font-size:17px; margin:0 0 6px; }
+    .node p { margin:0; color:var(--muted); font-size:13px; line-height:1.55; }
+    .packet { position:absolute; top:59px; left:11%; width:14px; height:14px; border-radius:50%; background:var(--cyan); box-shadow:0 0 18px var(--cyan); z-index:3; animation:travel 6s ease-in-out infinite; }
+    @keyframes travel { 0%,8%{left:11%} 30%{left:37%} 56%{left:63%} 82%,100%{left:88%} }
+    .detail { margin-top:28px; display:grid; grid-template-columns:1.1fr .9fr; gap:20px; }
+    .panel { background:#091827d9; border:1px solid #213b56; border-radius:18px; padding:24px; min-height:280px; }
+    .panel h3 { margin:0 0 16px; font-size:15px; color:var(--cyan); }
+    pre { margin:0; white-space:pre-wrap; color:#cce1f5; line-height:1.6; font:13px/1.6 ui-monospace,SFMono-Regular,monospace; }
+    .event { padding:14px 0; border-bottom:1px solid #1c344b; cursor:pointer; border-radius:10px; transition:.2s; }
+    .event:hover { padding-left:10px; background:#10263a; }
+    .event.conflict { padding:14px 12px; border:1px solid #ff7b7255; background:#3a1a1a66; }
+    .event.conflict .time { color:#ff9b94; }
+    .event:last-child { border:0; }
+    .time { color:var(--cyan); font:12px ui-monospace,monospace; }
+    .event strong { display:block; margin:5px 0; font-size:14px; }
+    .event span { color:var(--muted); font-size:13px; }
+    .legend { display:flex; align-items:center; gap:9px; margin-top:28px; color:var(--muted); font-size:12px; }
+    .dot { width:9px; height:9px; border-radius:50%; background:var(--cyan); box-shadow:0 0 10px var(--cyan); }
+    .controls { display:grid; grid-template-columns:1fr 1.4fr auto; gap:12px; margin:0 0 28px; padding:15px; border:1px solid #29435f; border-radius:16px; background:#091827c7; }
+    input,button { width:100%; border:1px solid #29435f; border-radius:11px; padding:12px; color:var(--text); background:#0d2033; }
+    input[type=file] { padding:9px; }
+    button { width:auto; min-width:120px; cursor:pointer; color:#031317; background:var(--cyan); border-color:var(--cyan); font-weight:700; }
+    button:disabled { opacity:.5; cursor:wait; }
+    .status { margin:-16px 0 26px; min-height:20px; color:var(--muted); font-size:13px; }
+    video { width:100%; display:block; border-radius:12px; background:#02070c; }
+    .timeline { position:relative; height:38px; margin:14px 0 20px; border-radius:10px; background:#10253a; overflow:hidden; }
+    .segment { position:absolute; top:0; bottom:0; border-right:1px solid #07111f; background:#4ee1d255; cursor:pointer; transition:.2s; }
+    .segment:hover { background:#4ee1d299; }
+    .segment.conflict { background:#ff6b6377; }
+    .playhead { position:absolute; top:0; bottom:0; width:2px; background:#fff; box-shadow:0 0 8px #fff; pointer-events:none; z-index:2; }
+    .verification { margin:14px 0 18px; padding:13px; border-radius:11px; border:1px solid #ff7b7255; color:#ffc1bc; background:#34191988; font-size:13px; line-height:1.55; }
+    .verification.ok { border-color:#4ee1d255; color:#a8eee7; background:#12332f66; }
+    .badge { display:inline-block; margin-left:7px; padding:2px 7px; border-radius:999px; color:#ffd0cc; background:#8a302b; font-size:11px; }
+    @media(max-width:800px){ .controls{grid-template-columns:1fr}.flow{grid-template-columns:1fr 1fr}.flow::before,.packet{display:none}.detail{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+<main>
+  <h1>多模态数据如何流动</h1>
+  <p class="sub">搅拌机测试视频 · 端到端音画理解</p>
+
+  <section class="controls">
+    <input id="file" type="file" accept="video/*">
+    <input id="question" value="视频中发生了什么？声音与画面动作有什么对应关系？">
+    <button id="analyze">开始分析</button>
+  </section>
+  <div class="status" id="status">请选择一个不超过 25MB 的带声音视频</div>
+
+  <section class="flow">
+    <div class="packet"></div>
+    <article class="node active" data-step="0"><div class="icon">🎬</div><h2>视频输入</h2><p>画面 + 声音<br>samples/test_blender_av.webm</p></article>
+    <article class="node" data-step="1"><div class="icon">◈</div><h2>多模态模型</h2><p>同时理解视觉、音频和时间关系</p></article>
+    <article class="node" data-step="2"><div class="icon">{ }</div><h2>统一事件</h2><p>转换为 Agent 可使用的结构化 JSON</p></article>
+    <article class="node" data-step="3"><div class="icon">◎</div><h2>Agent</h2><p>推理、回答问题，必要时主动回看</p></article>
+  </section>
+
+  <section class="detail">
+    <div class="panel">
+      <h3>原视频与事件时间轴</h3>
+      <video id="player" controls preload="metadata" src="/samples/test_blender_av.webm"></video>
+      <div class="timeline" id="timeline"><i class="playhead" id="playhead"></i></div>
+      <div class="verification" id="verification">正在加载真实基准结果…</div>
+      <h3 id="title">当前数据 · 视频输入</h3><pre id="data"></pre>
+    </div>
+    <div class="panel"><h3>最终识别出的事件</h3><div id="events"></div></div>
+  </section>
+  <div class="legend"><i class="dot"></i> 发光圆点表示数据正在依次流过各模块</div>
+</main>
+<script>
+const views=[
+`文件: samples/test_blender_av.webm
+时长: 8.9 秒
+视觉: 1920 × 1080
+音频: Opus
+
+原始输入仍然包含不同模态，
+还没有转成 Agent 容易使用的语义。`,
+`模型输入
+├─ 视频帧：手、按钮、搅拌机、食材
+├─ 音频：环境声、机器嗡鸣
+└─ 提问：声音与画面动作有什么关系？
+
+模型在同一次推理中对齐画面和声音。`,
+`{
+  "time": "00:02-00:03",
+  "visual": "手按下开关，机器运转",
+  "audio": "搅拌机嗡鸣声响起",
+  "relation": "开关动作触发机器声音"
+}`,
+`Agent 获得的不是原始像素和波形，
+而是带时间与因果关系的事件。
+
+用户：为什么出现嗡鸣声？
+Agent：操作者按下开关，启动了搅拌机。
+
+信息不足时 → 请求重新分析某个时间片段。`
+];
+const titles=['视频输入','模型内部处理','统一事件 JSON','Agent 推理'];
+let eventData=[];
+let issues=[];
+const data=document.querySelector('#data'), title=document.querySelector('#title');
+const player=document.querySelector('#player'), timeline=document.querySelector('#timeline');
+const parseStart=value=>{
+ const match=String(value||'').match(/(\d+):(\d+)/); return match?(+match[1]*60)+(+match[2]):0;
+};
+const overlapsIssue=event=>issues.some(issue=>{
+ const [eventStart,eventEnd]=String(event.time).split('-').map(parseStart);
+ const [issueStart,issueEnd]=String(issue.time).split('-').map(parseStart);
+ return eventStart<issueEnd&&eventEnd>issueStart;
+});
+function select(i){
+ document.querySelectorAll('.node').forEach((n,j)=>n.classList.toggle('active',i===j));
+ title.textContent='当前数据 · '+titles[i]; data.textContent=views[i];
+}
+document.querySelectorAll('.node').forEach(n=>n.onclick=()=>select(+n.dataset.step));
+function seekTo(event){ player.currentTime=parseStart(event.time); player.play().catch(()=>{}); }
+function renderEvents(events){
+ const root=document.querySelector('#events'); root.replaceChildren();
+ if(!events.length){ const empty=document.createElement('span'); empty.className='sub'; empty.textContent='没有返回事件'; root.append(empty); return; }
+ events.forEach(event=>{
+  const conflict=overlapsIssue(event), item=document.createElement('div');
+  item.className='event'+(conflict?' conflict':''); item.onclick=()=>seekTo(event);
+  const time=document.createElement('span'); time.className='time'; time.textContent=event.time;
+  if(conflict){ const badge=document.createElement('b'); badge.className='badge'; badge.textContent='需复核'; time.append(badge); }
+  const visual=document.createElement('strong'); visual.textContent=event.visual;
+  const detail=document.createElement('span'); detail.textContent=`声音：${event.audio}\n关系：${event.relation}`; detail.style.whiteSpace='pre-line';
+  item.append(time,visual,detail); root.append(item);
+ });
+}
+function renderTimeline(events){
+ timeline.querySelectorAll('.segment').forEach(node=>node.remove());
+ const duration=player.duration||8.854;
+ events.forEach(event=>{
+  const [start,end]=String(event.time).split('-').map(parseStart), segment=document.createElement('i');
+  segment.className='segment'+(overlapsIssue(event)?' conflict':'');
+  segment.style.left=`${start/duration*100}%`; segment.style.width=`${Math.max(end-start,.2)/duration*100}%`;
+  segment.title=`${event.time} ${event.visual}`; segment.onclick=()=>seekTo(event); timeline.append(segment);
+ });
+}
+function applyResult(result,verificationData){
+ eventData=result.events||[]; issues=verificationData?.issues||[];
+ views[2]=JSON.stringify(result,null,2); renderEvents(eventData); renderTimeline(eventData);
+ const box=document.querySelector('#verification');
+ box.classList.toggle('ok',Boolean(verificationData)&&!issues.length);
+ box.textContent=verificationData?.assessment||(issues.length?'存在需要复核的事件':'模型结果尚未独立核对');
+}
+fetch('/baselines/blender.json').then(response=>response.json()).then(baseline=>applyResult(baseline.result,baseline.verification)).catch(error=>{
+ document.querySelector('#verification').textContent='基准结果加载失败：'+error.message;
+});
+player.addEventListener('loadedmetadata',()=>renderTimeline(eventData));
+player.addEventListener('timeupdate',()=>{ document.querySelector('#playhead').style.left=`${player.currentTime/(player.duration||1)*100}%`; });
+document.querySelector('#file').addEventListener('change',event=>{
+ const file=event.target.files[0];
+ if(file){
+  player.src=URL.createObjectURL(file); eventData=[]; issues=[];
+  renderEvents(eventData); renderTimeline(eventData);
+  document.querySelector('#verification').textContent='新视频尚未分析';
+ }
+});
+document.querySelector("#analyze").onclick=async()=>{
+ const file=document.querySelector("#file").files[0], button=document.querySelector("#analyze"), status=document.querySelector("#status");
+ if(!file){ status.textContent="请先选择视频"; return; }
+ if(file.size>25*1024*1024){ status.textContent="视频超过 25MB"; return; }
+ button.disabled=true; status.textContent="① 视频上传中…"; select(0);
+ try{
+  setTimeout(()=>{ if(button.disabled){ status.textContent="② 多模态模型正在对齐画面与声音…"; select(1); } },500);
+  const question=encodeURIComponent(document.querySelector("#question").value);
+  const response=await fetch("/api/analyze",{method:"POST",headers:{"Content-Type":file.type||"video/mp4","X-Question":question},body:file});
+  const body=await response.json(); if(!response.ok) throw new Error(body.error||"请求失败");
+  status.textContent="③ 已生成统一事件，数据进入 Agent"; select(2);
+  applyResult(body.result,null); data.textContent=views[2];
+  setTimeout(()=>{ select(3); status.textContent="④ Agent 已获得可推理的多模态事件"; },700);
+ }catch(error){ status.textContent="失败："+error.message; }
+ finally{ button.disabled=false; }
+};
+select(0);
+</script>
+</body>
+</html>

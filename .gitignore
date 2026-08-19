@@ -1,0 +1,42 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Python environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Downloaded models and generated results
+models/
+outputs/
+
+# Local and downloaded video data
+samples/*
+!samples/README.md
+evaluation/data/media/
+*.mp4
+*.webm
+*.mov
+*.mkv
+*.avi
+*.m4v
+*.mpeg
+*.mpg
+*.wmv
+*.flv
+*.3gp
+*.ts
+*.mts
+*.m2ts
+*.ogv
+*.ogg
+
+# Local tool state
+.agents/
+.codex/
+.DS_Store

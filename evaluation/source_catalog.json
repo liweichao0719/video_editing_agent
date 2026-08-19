@@ -1,0 +1,134 @@
+{
+  "version": 1,
+  "source": "Wikimedia Commons",
+  "items": [
+    {
+      "id": "glass-teacup-realtime-positive",
+      "file_title": "File:Glass tea cup smashes on concrete floor - close-up video.webm",
+      "filename": "positive_glass_teacup_realtime.webm",
+      "expected": true,
+      "source_group": "pittigrilli-teacup",
+      "license_expected": "CC BY-SA 4.0"
+    },
+    {
+      "id": "drone-early-window-rig-positive",
+      "file_title": "File:Drones vs. Windows.webm",
+      "filename": "positive_drone_early_window_rig.webm",
+      "expected": true,
+      "source_group": "rotor-riot-drones-windows",
+      "license_expected": "CC BY 3.0",
+      "license_review_note": "Wikimedia Commons 页面当前标记为 license review needed",
+      "derivative_url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/3/3b/Drones_vs._Windows.webm/Drones_vs._Windows.webm.240p.vp9.webm",
+      "derivative_size": 40509345,
+      "clip_start": 139.0,
+      "clip_end": 160.0
+    },
+    {
+      "id": "drone-car-side-window-positive",
+      "file_title": "File:Drones vs. Windows.webm",
+      "filename": "positive_drone_car_side_window.webm",
+      "expected": true,
+      "source_group": "rotor-riot-drones-windows",
+      "license_expected": "CC BY 3.0",
+      "license_review_note": "Wikimedia Commons 页面当前标记为 license review needed",
+      "derivative_url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/3/3b/Drones_vs._Windows.webm/Drones_vs._Windows.webm.240p.vp9.webm",
+      "derivative_size": 40509345,
+      "clip_start": 506.0,
+      "clip_end": 536.0
+    },
+    {
+      "id": "drone-window-rig-impact-positive",
+      "file_title": "File:Drones vs. Windows.webm",
+      "filename": "positive_drone_window_rig_impact.webm",
+      "expected": true,
+      "source_group": "rotor-riot-drones-windows",
+      "license_expected": "CC BY 3.0",
+      "license_review_note": "Wikimedia Commons 页面当前标记为 license review needed",
+      "derivative_url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/3/3b/Drones_vs._Windows.webm/Drones_vs._Windows.webm.240p.vp9.webm",
+      "derivative_size": 40509345,
+      "clip_start": 285.0,
+      "clip_end": 307.0
+    },
+    {
+      "id": "glass-teacup-veryslow-positive",
+      "file_title": "File:Very slow motion video of glass tea cup smashed on concrete floor.webm",
+      "filename": "positive_glass_teacup_veryslow.webm",
+      "expected": true,
+      "source_group": "pittigrilli-teacup",
+      "license_expected": "CC BY-SA 4.0"
+    },
+    {
+      "id": "blender-negative",
+      "file_title": "File:Kitchen blender.webm",
+      "filename": "test_blender_av.webm",
+      "local_path": "samples/test_blender_av.webm",
+      "local_existing": true,
+      "expected": false,
+      "source_group": "sounds-of-changes-blender",
+      "license_expected": "CC BY 3.0"
+    },
+    {
+      "id": "osmium-collision-negative",
+      "file_title": "File:Metal osmium collides with each other and makes a crisp sound.webm",
+      "filename": "negative_osmium_collision.webm",
+      "expected": false,
+      "source_group": "francois-nguyen-osmium",
+      "license_expected": "CC BY 2.0"
+    },
+    {
+      "id": "osmium-striking-negative",
+      "file_title": "File:The sound produced by striking metal osmium.webm",
+      "filename": "negative_osmium_striking.webm",
+      "expected": false,
+      "source_group": "francois-nguyen-osmium",
+      "license_expected": "CC BY 2.0"
+    },
+    {
+      "id": "steel-forging-negative",
+      "file_title": "File:Smithy- steel forging (2).webm",
+      "filename": "negative_steel_forging.webm",
+      "expected": false,
+      "source_group": "sounds-of-changes-forging",
+      "license_expected": "CC BY 3.0"
+    },
+    {
+      "id": "tin-cry-negative",
+      "file_title": "File:Zinnschrei.webm",
+      "filename": "negative_tin_cry.webm",
+      "expected": false,
+      "source_group": "tinux-tin",
+      "license_expected": "CC0 1.0"
+    }
+  ],
+  "excluded_items": [
+    {
+      "file_title": "File:Shattering glass jar in slow motion.ogg",
+      "filename": "positive_glass_jar_slowmotion.ogg",
+      "reason": "ffprobe 核验无音轨，不能用于音频事件评测"
+    },
+    {
+      "file_title": "File:210FPS Glühbirne zerbricht Glas lightbulb breaking crash Casio Exilim EX-FC100 Slowmotion.webm",
+      "filename": "positive_glass_bulb_210fps.webm",
+      "reason": "ffprobe 核验无音轨，不能用于音频事件评测"
+    },
+    {
+      "file_title": "File:420FPS Glühbirne zerbricht Glas lightbulb breaking crash Casio Exilim EX-FC100 Slowmotion.webm",
+      "filename": "positive_glass_bulb_420fps.webm",
+      "reason": "虽有音轨，但 volumedetect 核验全程约 -91 dB，实质静音"
+    }
+  ],
+  "excluded_clips": [
+    {
+      "source": "File:Drones vs. Windows.webm",
+      "clip_start": 130.0,
+      "clip_end": 140.0,
+      "reason": "复核后确认只是碰撞，画面未见玻璃破碎"
+    },
+    {
+      "source": "File:Drones vs. Windows.webm",
+      "clip_start": 449.0,
+      "clip_end": 458.0,
+      "reason": "复核后确认挡风玻璃保持完整"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "events": [
+    {
+      "name": "玻璃破碎",
+      "aliases": ["glass breaking", "glass break"],
+      "yamnet_labels": ["Glass", "Shatter", "Breaking", "Crack", "Chink, clink"]
+    },
+    {
+      "name": "敲门",
+      "aliases": ["knock", "door knock"],
+      "yamnet_labels": ["Knock", "Tap", "Door"]
+    },
+    {
+      "name": "报警",
+      "aliases": ["alarm"],
+      "yamnet_labels": ["Alarm", "Siren", "Smoke detector, smoke alarm", "Fire alarm"]
+    },
+    {
+      "name": "搅拌机",
+      "aliases": ["blender"],
+      "yamnet_labels": ["Blender"]
+    }
+  ]
+}

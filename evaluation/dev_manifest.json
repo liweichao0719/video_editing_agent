@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "name": "glass-breaking-dev-smoke",
+  "description": "开发冒烟集，不代表真实场景准确率。",
+  "root": "..",
+  "default_event": "玻璃破碎",
+  "samples": [
+    {
+      "id": "glass-synthetic-positive-001",
+      "path": "tests/fixtures/test_glass_with_sound.mp4",
+      "split": "dev",
+      "kind": "synthetic",
+      "expected": true,
+      "events": [
+        {
+          "start": 5.0,
+          "end": 5.864
+        }
+      ],
+      "notes": "在静音玻璃画面中加入 CC0 玻璃破碎声音，仅用于开发。"
+    },
+    {
+      "id": "blender-real-negative-001",
+      "path": "samples/test_blender_av.webm",
+      "split": "dev",
+      "kind": "real",
+      "expected": false,
+      "events": [],
+      "notes": "真实搅拌机视频，作为持续机械声负样本。"
+    }
+  ]
+}
